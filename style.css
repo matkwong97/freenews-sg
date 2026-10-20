@@ -4,3 +4,22 @@
 .quickbutton{margin-top:0;padding:16px;font-weight:700}.pullhint{text-align:center;font:12px system-ui;opacity:.6;padding:8px}.story:active{opacity:.65}
 
 .quickButton{width:100%;margin-top:3px;padding:15px;border-color:#a34e42;font-weight:700}.story h2{transition:opacity .25s}.story:active{opacity:.8}body{overscroll-behavior-y:auto}
+
+/* Compact, scanner-friendly payment QR presentation */
+.payments{gap:clamp(12px,4vw,30px);align-items:start;max-width:570px;margin:28px auto 0}
+.payments>div{min-width:0;display:flex;flex-direction:column;align-items:center;gap:7px}
+.payments img{width:100%;max-width:225px;max-height:none;aspect-ratio:1;object-fit:contain;background:#fff;padding:9px;border:1px solid #ded9cf;border-radius:10px;box-shadow:0 5px 22px #00000012}
+.payments small{margin-top:0;font-weight:600}
+.interest-search{position:relative}
+.suggestions{position:absolute;top:calc(100% + 3px);left:0;right:0;z-index:10;background:#fff;color:#20252a;border:1px solid #b9b1a4;border-radius:6px;box-shadow:0 12px 26px #0003;max-height:280px;overflow:auto}
+.suggestions[hidden]{display:none}
+.suggestions button{width:100%;padding:12px 14px;border:0;border-bottom:1px solid #ddd;background:transparent;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:10px;font:14px system-ui;color:inherit}
+.suggestions button:hover,.suggestions button:focus{background:#f6eee7}
+.suggestions small{opacity:.65;text-transform:capitalize}
+.selected-topics{display:flex;flex-wrap:wrap;gap:8px}
+.selected-topics:empty{display:none}
+.chosen{border:1px solid #a34e42;border-radius:20px;padding:7px 11px;background:#a34e4214;color:inherit;font:13px system-ui}
+.chosen span{font-size:18px;margin-left:7px}
+.dark .suggestions{background:#252a2d;color:#f3eee6;border-color:#646464}
+.dark .suggestions button:hover{background:#383b3d}
+@media(max-width:520px){.payments img{max-height:none;padding:6px}.payments{gap:12px}}
