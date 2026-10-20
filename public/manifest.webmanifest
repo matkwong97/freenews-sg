@@ -1,0 +1,1 @@
+{"name": "FreeNews SG", "short_name": "FreeNews SG", "description": "All the news you need, thoughtfully gathered.", "start_url": "/", "display": "standalone", "background_color": "#f6f3eb", "theme_color": "#a34e42", "icons": [{"src": "/icon-192.png", "sizes": "192x192", "type": "image/png"}, {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png"}]}
