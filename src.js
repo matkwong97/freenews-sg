@@ -110,7 +110,31 @@ async function loadPuzzle(type=state.puzzleType,next=false){state.puzzleType=typ
 state.puzzle=shared&&shared[1]===type?bank[Number(shared[2])%bank.length]:bank[(day*31+counter*43)%bank.length];state.puzzleId=state.puzzle.id;state.puzzleInputs={};if(state.page==='puzzle')render()}catch(e){console.warn(e)}}
 function puzzlePage(){let p=state.puzzle,kind=state.puzzleType;let body='';if(p&&kind==='sudoku'){body=`<div class="sudoku-grid" role="group" aria-label="Sudoku grid">${[...p.puzzle].map((v,i)=>`<input inputmode="numeric" pattern="[1-9]" maxlength="1" aria-label="Row ${Math.floor(i/9)+1} column ${i%9+1}" data-cell="${i}" ${v!=='0'?`value="${v}" readonly class="given"`:`value="${escape(state.puzzleInputs?.[i]||'')}"`} />`).join('')}</div>`}else if(p){let nums=new Map(p.entries.map(e=>[e.r+','+e.c,e.number]));body=`<div class="crossword-grid" style="--cw:${p.size}">${p.grid.join('').split('').map((v,i)=>v==='#'?`<div class="cw-block"></div>`:`<div class="cw-cell"><small>${nums.get(Math.floor(i/p.size)+','+(i%p.size))||''}</small><input maxlength="1" aria-label="Crossword row ${Math.floor(i/p.size)+1} column ${i%p.size+1}" data-cell="${i}" value="${escape(state.puzzleInputs?.[i]||'')}"/></div>`).join('')}</div><div class="crossword-clues"><div><h3>Across</h3>${p.entries.filter(e=>e.direction==='across').map(e=>`<p>${e.number}. ${escape(e.clue)}</p>`).join('')}</div><div><h3>Down</h3>${p.entries.filter(e=>e.direction==='down').map(e=>`<p>${e.number}. ${escape(e.clue)}</p>`).join('')}</div></div>`}return `${fold()}${header()}<section class="section"><span class="eyebrow">PUZZLE CORNER</span><h1>✎ ${label("puzzle","Daily Puzzle")}</h1><label for="puzzleType">Choose your puzzle</label><select id="puzzleType"><option value="sudoku" ${kind==='sudoku'?'selected':''}>Sudoku</option><option value="crossword" ${kind==='crossword'?'selected':''}>Crossword</option></select><p class="fine">400 pre-generated variations for each game · Puzzle #${p?p.id+1:'—'}</p>${p?body:simpleLoading('Preparing your puzzle…')}<div class="action-row"><button class="secondary" id="checkPuzzle">${label("check","Check answers")}</button><button class="secondary" id="newPuzzle">New variation ↻</button><button class="secondary" id="sharePuzzle">${label("share","Share puzzle")} ↗</button></div><p id="puzzleStatus" role="status" class="fine"></p></section>${footer()}`}
 function checkPuzzle(){let p=state.puzzle;if(!p)return;let total=0,correct=0;if(state.puzzleType==='sudoku'){for(let i=0;i<81;i++){if(p.puzzle[i]!=='0')continue;total++;if(state.puzzleInputs[i]===p.solution[i])correct++}}else{for(let i=0;i<p.size*p.size;i++){let v=p.grid[Math.floor(i/p.size)][i%p.size];if(v==='#')continue;total++;if((state.puzzleInputs[i]||'').toUpperCase()===v)correct++}}let status=$('#puzzleStatus');if(status)status.textContent=correct===total?'Perfect! Puzzle solved.':`${correct} of ${total} editable squares correct. Keep going!`}
-async function explainMatthew(){let a=state.selected;if(!a)return;let box=$('#matthewResult');if(box)box.textContent='Matthew is reading the news, wait ah…';try{let r=await fetch('/api/matthew',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title:a.title,description:a.description,lang:state.lang})});let d=await r.json();if(box)box.textContent=d.explanation||d.notice||'Cannot load right now, paiseh.'}catch(e){if(box)box.textContent='Matthew Mode temporarily unavailable. Try again later, can?'}}
+function localMatthewFallback(article){
+ const a=normaliseArticle(article),body=(a.description||'').trim();
+ const sentences=body.match(/[^.!?]+[.!?]?/g)||[];
+ const facts=sentences.map(x=>x.trim()).filter(x=>x.length>24).slice(0,2).join(' ').slice(0,400)||`The headline says: ${a.title}.`;
+ return `Aiyoh, this one got story lah. ${facts} But hor, this is only the publisher excerpt. Don't anyhow jump to conclusions or make the headline into a whole drama series. Read the original report for the full picture, can?`;
+}
+const matthewCache=new Map();
+async function explainMatthew(){
+ const a=state.selected;if(!a)return;
+ const box=$('#matthewResult');if(!box)return;
+ const key=a.link+'|'+state.lang;
+ if(matthewCache.has(key)){box.textContent=matthewCache.get(key);return;}
+ const fallback=localMatthewFallback(a);
+ box.textContent=fallback;
+ try{
+  const controller=new AbortController();const timer=setTimeout(()=>controller.abort(),12000);
+  let response;
+  try{response=await fetch('/api/matthew',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({title:plainNewsText(a.title),description:plainNewsText(a.description),lang:state.lang}),signal:controller.signal})}finally{clearTimeout(timer)}
+  if(!response.ok)throw Error('Matthew endpoint '+response.status);
+  const data=await response.json();const explanation=plainNewsText(data.explanation||'');
+  if(explanation.length<40)throw Error('Empty explanation');
+  matthewCache.set(key,explanation);
+  if(state.selected?.link===a.link&&document.querySelector('#matthewResult'))document.querySelector('#matthewResult').textContent=explanation;
+ }catch(error){console.warn('Matthew Mode fallback used',error);matthewCache.set(key,fallback)}
+}
 async function openStory(a){a=normaliseArticle(a);state.fromQuick=state.page==="quick";state.selected=a;state.fromPage=state.page;state.page="detail";state.short=false;state.summaryLoading=true;state.summary={summary:a.description,headline:a.title,bullets:[],mode:"original"};render();window.scrollTo(0,0);let current=a;let lang=state.lang;let result=await getSummary(a);if(state.page==="detail"&&state.selected===current&&state.lang===lang){state.summary=result;state.summaryLoading=false;render()}}
 
 function isLocal(a){const q=(a.title+" "+a.description).toLowerCase(),c=state.country.toLowerCase();return state.country==="Singapore"?(a.category==="local"||/singapore|singaporean|sg government|mrt\b|hdb\b|mas\b/.test(q)):q.includes(c)||({Malaysia:/malaysian|kuala lumpur|penang/,Indonesia:/indonesian|jakarta/,Japan:/japanese|tokyo/,China:/chinese|beijing/, "United States":/american|u\.s\.|washington/, "United Kingdom":/british|london|uk\b/}[state.country]||/$^/).test(q)}

@@ -181,17 +181,31 @@ async function getJobs(request,env,ctx){
  let out=responseJSON({jobs:all,country,availableSources:results.filter(r=>r.status==='fulfilled').length,sources:code==='SG'?['Careers@Gov public dataset','Remotive','Arbeitnow',...(env.HEADCOUNT_API_KEY?['Headcount Labs']:[])]:['Remotive','Arbeitnow'],updated:new Date().toISOString(),notice:code==='SG'?(all.some(j=>j.source==='Careers@Gov (public dataset)')?'Singapore government vacancies from a publicly maintained Careers@Gov dataset, plus country-eligible jobs from other feeds. Verify current status at the source.':'Singapore government dataset unavailable or empty; showing only other verified country-eligible roles. Use the job-board links for more.'):(all.length?'Only listings explicitly eligible for this country or worldwide are shown.':'No verified country-eligible listings from the current public feeds; use the local job-board links below.')},900);
  ctx.waitUntil(cache.put(key,out.clone()));return out;
 }
+function matthewFallback(title,description,lang='en'){
+ const headline=clean(title).slice(0,260),excerpt=clean(description).slice(0,850);
+ const sentences=excerpt.match(/[^.!?]+[.!?]?/g)||[];
+ const factual=sentences.map(x=>x.trim()).filter(x=>x.length>24).slice(0,2).join(' ').slice(0,390);
+ const intro=lang==='zh'?'哎哟，这条新闻简单来说：':lang==='ms'?'Aiyoh, senang cerita: ':'Aiyoh, this one got story lah. ';
+ const facts=factual||`The headline says: ${headline}.`;
+ const outro=lang==='zh'?' 不过别急着下结论；这里只是新闻摘要，细节要看原文。':lang==='ms'?' Jangan terus buat kesimpulan; ini hanya petikan ringkas. Baca laporan asal untuk butiran penuh.':' But hor, this is only the publisher excerpt, not the full article. Don’t anyhow jump to conclusions or turn a headline into a whole drama series. Read the original report for the full picture, can?';
+ return intro+facts+outro;
+}
 async function matthewMode(request,env){
  let d;try{d=await request.json()}catch{return responseJSON({notice:'Invalid request'},0)}
- let title=String(d.title||'').slice(0,300),description=String(d.description||'').slice(0,1800);
- if(!title)return responseJSON({notice:'No headline'},0);
- if(!env.AI)return responseJSON({explanation:'Aiyoh, this story is about '+title+'. But the AI explanation is not available now lah. Read the original publisher report for the full story.',ai:false},0);
+ const title=clean(String(d.title||'').slice(0,350)),description=clean(String(d.description||'').slice(0,2300)),lang=['en','zh','ms'].includes(d.lang)?d.lang:'en';
+ if(!title)return responseJSON({notice:'No headline supplied'},0);
+ const fallback=matthewFallback(title,description,lang);
+ if(!env.AI)return responseJSON({explanation:fallback,ai:false,mode:'fallback'},0);
  try{
- let prompt=`Explain this news in light, conversational Singapore Singlish. Equal parts funny, snarky and cheeky, but kind, respectful and never cruel to victims. Make the factual explanation clear FIRST. Use only the supplied headline and publisher excerpt; do not invent details, context, quotes or causes. 90-130 words, 2 paragraphs maximum. Make clear when excerpt lacks detail. Don't present opinions as facts. No markdown. HEADLINE: ${title} EXCERPT: ${description}`;
- let r=await env.AI.run('@cf/meta/llama-3.1-8b-instruct',{messages:[{role:'system',content:'You are Matthew Mode, a playful Singaporean news explainer. Accurate, considerate, cheeky. Never fabricate news.'},{role:'user',content:prompt}],temperature:.65,max_tokens:340});
- return responseJSON({explanation:String(r.response||'').slice(0,1400),ai:true},0)
- }catch{return responseJSON({notice:'Matthew Mode temporarily unavailable. The original story is still available.'},0)}
+  const language=lang==='zh'?'Simplified Chinese with some natural Singlish phrases':lang==='ms'?'Malay with some natural Singlish phrases':'English with natural Singapore Singlish';
+  const prompt=`Explain the following news in ${language}, with a witty, slightly snarky, cheeky Singaporean newspaper-column voice. Lead with a clear factual explanation, then one playful observation. Only use facts in the headline and excerpt; do not invent details, timelines, quotes, motives or identities. Do not joke about injuries, deaths, disasters or victims. If the source is incomplete, say so. No markdown. 75 to 125 words. Headline: ${title}\nPublisher excerpt: ${description||'(No excerpt supplied)'}`;
+  const result=await Promise.race([env.AI.run('@cf/meta/llama-3.1-8b-instruct',{messages:[{role:'system',content:'You explain current events accurately with Singaporean humour. Source fidelity is essential. Never make up facts.'},{role:'user',content:prompt}],temperature:0.55,max_tokens:280}),new Promise((_,reject)=>setTimeout(()=>reject(Error('AI timeout')),10000))]);
+  const explanation=clean(typeof result?.response==='string'?result.response:result?.result?.response||'').slice(0,1500);
+  if(explanation.length<45)throw Error('Empty explanation');
+  return responseJSON({explanation,ai:true,mode:'ai'},0);
+ }catch(e){console.warn('Matthew AI unavailable',String(e));return responseJSON({explanation:fallback,ai:false,mode:'fallback'},0)}
 }
+
 export default {async fetch(request,env,ctx){let url=new URL(request.url);if(url.pathname==="/api/jobs")return getJobs(request,env,ctx);if(url.pathname==="/api/location")return responseJSON({country:request.cf?.country||null},600);if(url.pathname==="/api/matthew"&&request.method==="POST")return matthewMode(request,env);if(url.pathname==="/api/enrich"&&request.method==="POST")return enrich(request,env);if(url.pathname==="/api/translate"&&request.method==="POST")return translate(request,env);if(url.pathname==="/api/summary"){
 if(request.method!=="POST")return new Response("Method not allowed",{status:405});
 let data;try{data=await request.json()}catch{return Response.json({error:"Invalid request"},{status:400})}
