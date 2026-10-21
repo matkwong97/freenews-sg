@@ -74,7 +74,23 @@ const allFeeds=[...feeds,...extraFeeds,...discovery.map(discoveryFeed)];
 function canonicalSourceLink(link,domain){
  try{const u=new URL(link);return u.hostname===domain||u.hostname.endsWith("."+domain)||u.hostname==="news.google.com"||u.hostname==="www.google.com"}catch{return false}
 }
-function clean(s){return (s||"").replace(/<!\[CDATA\[|\]\]>/g,"").replace(/<[^>]*>/g," ").replace(/&(?:amp|#38);/g,"&").replace(/&(?:quot|#34);/g,'"').replace(/&(?:apos|#39);/g,"'").replace(/&nbsp;/g," ").replace(/&#(\d+);/g,(_,n)=>String.fromCharCode(+n)).replace(/\s+/g," ").trim()}
+function decodeEntities(s){
+ return String(s).replace(/&(#(?:x[0-9a-f]+|\d+)|amp|lt|gt|quot|apos|nbsp|hellip|mdash|ndash|rsquo|lsquo|ldquo|rdquo);/gi,(m,entity)=>{
+  const e=entity.toLowerCase();
+  if(e[0]==="#"){const hex=e[1]==="x",code=parseInt(e.slice(hex?2:1),hex?16:10);return Number.isFinite(code)&&code>0&&code<=0x10ffff&&!(code>=0xd800&&code<=0xdfff)?String.fromCodePoint(code):" ";}
+  return ({amp:"&",lt:"<",gt:">",quot:'"',apos:"'",nbsp:" ",hellip:"…",mdash:"—",ndash:"–",rsquo:"’",lsquo:"‘",ldquo:"“",rdquo:"”"})[e]||m;
+ });
+}
+function clean(s){
+ let text=String(s||"").replace(/<!\[CDATA\[|\]\]>/g,"");
+ for(let i=0;i<4;i++){
+  const decoded=decodeEntities(text);
+  if(decoded===text)break;
+  text=decoded;
+ }
+ return text.replace(/<\s*(?:script|style|iframe|svg)\b[^>]*>[\s\S]*?<\s*\/\s*(?:script|style|iframe|svg)\s*>/gi," ")
+  .replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
+}
 function tag(s,n){return (s.match(new RegExp("<(?:[\\w-]+:)?"+n+"(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[\\w-]+:)?"+n+">","i"))||[])[1]||""}
 function parse(xml,source,cat){let entries=xml.match(/<item(?:\s[^>]*)?>[\s\S]*?<\/item>/gi)||xml.match(/<entry(?:\s[^>]*)?>[\s\S]*?<\/entry>/gi)||[];return entries.slice(0,45).map(s=>{let title=clean(tag(s,"title")),link=clean(tag(s,"link"))||((s.match(/<link[^>]+href="([^"]+)"/)||[])[1]||""),description=clean(tag(s,"description")||tag(s,"summary")||tag(s,"content")),date=tag(s,"pubDate")||tag(s,"published")||tag(s,"updated");return {title,link,description:description.slice(0,1200),date:(Number.isFinite(Date.parse(date))?new Date(date).toISOString():""),source,category:cat}}).filter(x=>x.title&&/^https?:/.test(x.link))}
 const MODEL="@cf/meta/llama-3.1-8b-instruct";
